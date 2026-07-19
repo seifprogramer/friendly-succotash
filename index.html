@@ -310,7 +310,7 @@
     .claimed-info.error-state h4 { color: #e74c3c; }
     .claimed-info.error-state p { color: #c0392b; }
 
-    .glitch-msg {
+    .system-notice {
       background: rgba(231, 76, 60, 0.08);
       border: 1px solid rgba(231, 76, 60, 0.3);
       border-radius: 12px;
@@ -318,18 +318,18 @@
       margin-top: 20px;
       text-align: center;
     }
-    .glitch-msg h4 {
+    .system-notice h4 {
       color: var(--red);
       font-family: 'Cinzel', serif;
       margin-bottom: 8px;
       font-size: 1.1rem;
     }
-    .glitch-msg p {
+    .system-notice p {
       color: var(--red-dark);
       font-size: 0.9rem;
       line-height: 1.6;
     }
-    .glitch-msg .glitch-icon {
+    .system-notice .notice-icon {
       font-size: 2rem;
       color: var(--red);
       margin-bottom: 10px;
@@ -410,10 +410,10 @@
         <p>All 2 codes have been claimed. Stay tuned for more giveaways when we launch!</p>
       </div>
 
-      <div id="glitchMessage" class="glitch-msg hidden">
-        <span class="glitch-icon">&#9888;</span>
-        <h4 id="glitchTitle">System Glitch Detected</h4>
-        <p id="glitchText">Something went wrong. Please try again later.</p>
+      <div id="systemNotice" class="system-notice hidden">
+        <span class="notice-icon">&#9888;</span>
+        <h4 id="noticeTitle">System Alert</h4>
+        <p id="noticeText">Something went wrong. Please try again later.</p>
       </div>
     </div>
 
@@ -467,15 +467,39 @@
     // CONFIG
     // ============================================
     const MAX_CODES = 2;
-    const DEMO_MODE = false;
+    const DEMO_MODE = true;
     const SUPABASE_URL = 'https://rbniyexnrfupubykwezg.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_RdOlBBkKe46G0Jk5fR1x0Q__PZHxoDW';
+    const STORAGE_KEY = 'crowncash_claims_v1';
 
     var supabaseClient = null;
     var supabaseReady = false;
-    var demoClaims = [];
     var initAttempts = 0;
     const MAX_INIT_ATTEMPTS = 50;
+
+    function loadDemoClaims() {
+      try {
+        var stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch (e) {
+        console.error('Failed to load claims from storage:', e);
+      }
+      return [];
+    }
+
+    function saveDemoClaims(claims) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(claims));
+      } catch (e) {
+        console.error('Failed to save claims to storage:', e);
+      }
+    }
+
+    function getDemoClaims() {
+      return loadDemoClaims();
+    }
 
     function waitForSupabase() {
       return new Promise(function(resolve) {
@@ -495,10 +519,10 @@
 
     async function initSupabase() {
       if (DEMO_MODE) {
-        console.log('DEMO MODE: Using in-memory storage');
+        console.log('DEMO MODE: Using localStorage persistence');
         supabaseReady = true;
-        await updateStockDisplay();
-        await checkDeviceClaimed();
+        updateStockDisplay();
+        checkDeviceClaimed();
         return;
       }
 
@@ -506,7 +530,7 @@
 
       if (!loaded) {
         console.error('Supabase library failed to load');
-        showGlitch('Library Load Glitch', 'Failed to load Supabase library. Please check your internet connection and refresh the page.');
+        showSystemNotice('Configuration Error', 'Failed to load system architecture. Please verify network access and refresh.');
         return;
       }
 
@@ -514,21 +538,21 @@
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         supabaseReady = true;
         console.log('Supabase initialized successfully');
-        await updateStockDisplay();
-        await checkDeviceClaimed();
+        updateStockDisplay();
+        checkDeviceClaimed();
       } catch (err) {
         console.error('Supabase init error:', err);
-        showGlitch('Connection Glitch', 'Failed to connect to Supabase: ' + (err.message || 'Unknown error'));
+        showSystemNotice('Connection Error', 'Unable to reach backend gateway: ' + (err.message || 'Unknown issue'));
       }
     }
 
     initSupabase();
 
     function getDeviceId() {
-      var id = localStorage.getItem('crowncash_device_id_v2');
+      var id = localStorage.getItem('crowncash_device_id_v3');
       if (!id) {
         id = 'cc_' + Math.random().toString(36).substr(2, 16) + '_' + Date.now();
-        localStorage.setItem('crowncash_device_id_v2', id);
+        localStorage.setItem('crowncash_device_id_v3', id);
       }
       return id;
     }
@@ -565,36 +589,26 @@
       setTimeout(function() { toast.classList.remove('show'); }, 4000);
     }
 
-    function showGlitch(title, message) {
-      var glitchEl = document.getElementById('glitchMessage');
-      document.getElementById('glitchTitle').textContent = title || 'System Glitch Detected';
-      document.getElementById('glitchText').textContent = message || 'Something went wrong. Please try again later.';
-      glitchEl.classList.remove('hidden');
+    function showSystemNotice(title, message) {
+      var noticeEl = document.getElementById('systemNotice');
+      document.getElementById('noticeTitle').textContent = title || 'System Notice';
+      document.getElementById('noticeText').textContent = message || 'Something went wrong. Please try again later.';
+      noticeEl.classList.remove('hidden');
     }
 
-    function hideGlitch() {
-      document.getElementById('glitchMessage').classList.add('hidden');
+    function hideSystemNotice() {
+      document.getElementById('systemNotice').classList.add('hidden');
     }
 
-    async function getClaimCount() {
+    function getClaimCount() {
       if (DEMO_MODE) {
-        return demoClaims.length;
-      }
-      if (supabaseClient) {
-        var result = await supabaseClient
-          .from('claims')
-          .select('*', { count: 'exact', head: true });
-        if (result.error) {
-          console.error('Count error:', result.error);
-          return 0;
-        }
-        return result.count || 0;
+        return getDemoClaims().length;
       }
       return 0;
     }
 
-    async function updateStockDisplay() {
-      var count = await getClaimCount();
+    function updateStockDisplay() {
+      var count = getClaimCount();
       var remaining = Math.max(0, MAX_CODES - count);
       document.getElementById('stockCount').textContent = remaining;
 
@@ -607,20 +621,15 @@
       }
     }
 
-    async function checkDeviceClaimed() {
+    function checkDeviceClaimed() {
       var deviceId = getDeviceId();
+      var claims = getDemoClaims();
       var existing = null;
 
-      if (DEMO_MODE) {
-        existing = demoClaims.find(function(c) { return c.device_id === deviceId; });
-      } else if (supabaseClient) {
-        var result = await supabaseClient
-          .from('claims')
-          .select('email, claim_number')
-          .eq('device_id', deviceId)
-          .maybeSingle();
-        if (!result.error) {
-          existing = result.data;
+      for (var i = 0; i < claims.length; i++) {
+        if (claims[i].device_id === deviceId) {
+          existing = claims[i];
+          break;
         }
       }
 
@@ -640,7 +649,7 @@
     }
 
     function openClaimModal() {
-      hideGlitch();
+      hideSystemNotice();
 
       if (!supabaseReady) {
         var btn = document.getElementById('claimBtn');
@@ -662,7 +671,7 @@
           if (attempts >= maxAttempts) {
             btn.disabled = false;
             btn.textContent = originalText;
-            showGlitch('Connection Glitch', 'System is taking too long to start. Please refresh the page and try again.');
+            showSystemNotice('Connection Timeout', 'The terminal is taking longer than expected to initialize. Please refresh.');
             return;
           }
           setTimeout(retry, 100);
@@ -684,10 +693,10 @@
     }
 
     async function submitClaim() {
-      hideGlitch();
+      hideSystemNotice();
 
       if (!supabaseReady) {
-        showGlitch('Connection Glitch', 'System is not ready yet. Please wait a moment and try again.');
+        showSystemNotice('System Pending', 'Platform is completing security configurations. Please wait a brief moment.');
         return;
       }
 
@@ -696,11 +705,11 @@
       var btn = document.getElementById('submitClaimBtn');
 
       if (!email || !discord) {
-        showGlitch('Input Glitch', 'Please fill in all fields before submitting.');
+        showSystemNotice('Missing Information', 'Please satisfy all input parameters before sending.');
         return;
       }
       if (!email.includes('@') || !email.includes('.')) {
-        showGlitch('Email Glitch', 'Please enter a valid email address.');
+        showSystemNotice('Invalid Identity', 'Please structuralize your email parameter cleanly (e.g. you@example.com).');
         return;
       }
 
@@ -710,37 +719,28 @@
       try {
         var ip = await getIP();
         var deviceId = getDeviceId();
-
-        var count = await getClaimCount();
+        var claims = getDemoClaims();
+        var count = claims.length;
 
         if (count >= MAX_CODES) {
-          showGlitch('Out of Stock', 'Sorry, all codes have been claimed!');
+          showSystemNotice('Stock Exhausted', 'Apologies, allocations for this tier have met maximum capacity.');
           closeClaimModal();
-          await updateStockDisplay();
+          updateStockDisplay();
           return;
         }
 
         var existing = null;
-        if (DEMO_MODE) {
-          existing = demoClaims.find(function(c) { return c.device_id === deviceId; });
-        } else if (supabaseClient) {
-          var result2 = await supabaseClient
-            .from('claims')
-            .select('id')
-            .eq('device_id', deviceId)
-            .maybeSingle();
-
-          if (result2.error) {
-            showGlitch('Duplicate Check Glitch', 'Could not verify your claim status. Please try again.');
-            return;
+        for (var i = 0; i < claims.length; i++) {
+          if (claims[i].device_id === deviceId) {
+            existing = claims[i];
+            break;
           }
-          existing = result2.data;
         }
 
         if (existing) {
-          showGlitch('Duplicate Claim Glitch', 'You have already claimed a code from this device!');
+          showSystemNotice('Prior Registration Found', 'Our registry logs indicate this active profile signature has already submitted.');
           closeClaimModal();
-          await updateStockDisplay();
+          updateStockDisplay();
           return;
         }
 
@@ -756,26 +756,11 @@
           created_at: new Date().toISOString()
         };
 
-        if (DEMO_MODE) {
-          demoClaims.push(claimData);
-        } else if (supabaseClient) {
-          var result3 = await supabaseClient
-            .from('claims')
-            .insert([claimData]);
+        claims.push(claimData);
+        saveDemoClaims(claims);
+        console.log('Claim saved:', claimData);
 
-          if (result3.error) {
-            if (result3.error.message.includes('duplicate') || result3.error.code === '23505') {
-              showGlitch('Duplicate Glitch', 'You already claimed from this device!');
-            } else if (result3.error.message.includes('network') || result3.error.message.includes('fetch')) {
-              showGlitch('Network Glitch', 'Connection lost. Please check your internet and try again.');
-            } else {
-              showGlitch('Database Glitch', 'Failed to save your claim: ' + result3.error.message);
-            }
-            return;
-          }
-        }
-
-        await updateStockDisplay();
+        updateStockDisplay();
 
         document.getElementById('successClaimNumber').textContent = formatClaimNumber(claimNumber);
 
@@ -789,7 +774,7 @@
 
       } catch (err) {
         console.error('Submit error:', err);
-        showGlitch('Critical Glitch', 'An unexpected error occurred: ' + (err.message || 'Unknown error'));
+        showSystemNotice('Process Exception', 'A critical pipeline breakdown interrupted verification: ' + (err.message || 'Error executing request.'));
       } finally {
         btn.disabled = false;
         btn.textContent = 'Submit Request';
