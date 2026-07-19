@@ -464,7 +464,8 @@
       if (DEMO_MODE) {
         console.log('DEMO MODE: Using in-memory storage');
         supabaseReady = true;
-        loadData();
+        await updateStockDisplay();
+        await checkDeviceClaimed();
         return;
       }
 
@@ -476,17 +477,12 @@
         return;
       }
 
-      if (SUPABASE_URL.indexOf('YOUR_PROJECT_ID') !== -1 || SUPABASE_ANON_KEY.indexOf('YOUR_ANON_KEY') !== -1) {
-        console.warn('Supabase credentials not configured');
-        showGlitch('Config Glitch', 'Supabase is not configured yet. Please add your Supabase URL and Anon Key to the code.');
-        return;
-      }
-
       try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         supabaseReady = true;
         console.log('Supabase initialized successfully');
-        loadData();
+        await updateStockDisplay();
+        await checkDeviceClaimed();
       } catch (err) {
         console.error('Supabase init error:', err);
         showGlitch('Connection Glitch', 'Failed to connect to Supabase: ' + (err.message || 'Unknown error'));
@@ -547,6 +543,61 @@
       document.getElementById('glitchMessage').classList.add('hidden');
     }
 
+    async function getClaimCount() {
+      if (DEMO_MODE) {
+        return demoClaims.length;
+      }
+      if (supabaseClient) {
+        var result = await supabaseClient
+          .from('claims')
+          .select('*', { count: 'exact', head: true });
+        if (result.error) {
+          console.error('Count error:', result.error);
+          return 0;
+        }
+        return result.count || 0;
+      }
+      return 0;
+    }
+
+    async function updateStockDisplay() {
+      var count = await getClaimCount();
+      var remaining = Math.max(0, MAX_CODES - count);
+      document.getElementById('stockCount').textContent = remaining;
+
+      if (remaining === 0) {
+        document.getElementById('claimSection').classList.add('hidden');
+        document.getElementById('outOfStockSection').classList.remove('hidden');
+      } else {
+        document.getElementById('claimSection').classList.remove('hidden');
+        document.getElementById('outOfStockSection').classList.add('hidden');
+      }
+    }
+
+    async function checkDeviceClaimed() {
+      var deviceId = getDeviceId();
+      var existing = null;
+
+      if (DEMO_MODE) {
+        existing = demoClaims.find(function(c) { return c.device_id === deviceId; });
+      } else if (supabaseClient) {
+        var result = await supabaseClient
+          .from('claims')
+          .select('email')
+          .eq('device_id', deviceId)
+          .maybeSingle();
+        if (!result.error) {
+          existing = result.data;
+        }
+      }
+
+      if (existing) {
+        document.getElementById('claimSection').classList.add('hidden');
+        document.getElementById('claimedSection').classList.remove('hidden');
+        document.getElementById('claimedEmail').textContent = 'Submitted: ' + existing.email;
+      }
+    }
+
     function openClaimModal() {
       hideGlitch();
 
@@ -592,65 +643,8 @@
     }
 
     async function loadData() {
-      if (!supabaseReady) {
-        console.log('Supabase not ready, skipping loadData');
-        return;
-      }
-
-      try {
-        var count = 0;
-
-        if (DEMO_MODE) {
-          count = demoClaims.length;
-        } else if (supabaseClient) {
-          var result = await supabaseClient
-            .from('claims')
-            .select('*', { count: 'exact', head: true });
-
-          if (result.error) {
-            console.error('Count error:', result.error);
-            showGlitch('Data Load Glitch', 'Could not load stock count. Please refresh the page.');
-            return;
-          }
-          count = result.count || 0;
-        }
-
-        var remaining = Math.max(0, MAX_CODES - count);
-        document.getElementById('stockCount').textContent = remaining;
-
-        if (remaining === 0) {
-          document.getElementById('claimSection').classList.add('hidden');
-          document.getElementById('outOfStockSection').classList.remove('hidden');
-        }
-
-        var deviceId = getDeviceId();
-        var existing = null;
-
-        if (DEMO_MODE) {
-          existing = demoClaims.find(function(c) { return c.device_id === deviceId; });
-        } else if (supabaseClient) {
-          var result2 = await supabaseClient
-            .from('claims')
-            .select('email')
-            .eq('device_id', deviceId)
-            .maybeSingle();
-
-          if (result2.error) {
-            console.error('Exist check error:', result2.error);
-            return;
-          }
-          existing = result2.data;
-        }
-
-        if (existing) {
-          document.getElementById('claimSection').classList.add('hidden');
-          document.getElementById('claimedSection').classList.remove('hidden');
-          document.getElementById('claimedEmail').textContent = 'Submitted: ' + existing.email;
-        }
-      } catch (err) {
-        console.error('Load error:', err);
-        showGlitch('System Glitch', 'Failed to load data. Check your internet connection and try again.');
-      }
+      await updateStockDisplay();
+      await checkDeviceClaimed();
     }
 
     async function submitClaim() {
@@ -681,25 +675,12 @@
         var ip = await getIP();
         var deviceId = getDeviceId();
 
-        var count = 0;
-        if (DEMO_MODE) {
-          count = demoClaims.length;
-        } else if (supabaseClient) {
-          var result = await supabaseClient
-            .from('claims')
-            .select('*', { count: 'exact', head: true });
-
-          if (result.error) {
-            showGlitch('Stock Check Glitch', 'Could not verify remaining stock. Please try again.');
-            return;
-          }
-          count = result.count || 0;
-        }
+        var count = await getClaimCount();
 
         if (count >= MAX_CODES) {
           showGlitch('Out of Stock', 'Sorry, all codes have been claimed!');
           closeClaimModal();
-          loadData();
+          await updateStockDisplay();
           return;
         }
 
@@ -723,7 +704,7 @@
         if (existing) {
           showGlitch('Duplicate Claim Glitch', 'You have already claimed a code from this device!');
           closeClaimModal();
-          loadData();
+          await updateStockDisplay();
           return;
         }
 
@@ -736,7 +717,6 @@
             status: 'pending',
             created_at: new Date().toISOString()
           });
-          console.log('DEMO: Claim saved. Total claims:', demoClaims.length);
         } else if (supabaseClient) {
           var result3 = await supabaseClient
             .from('claims')
@@ -761,9 +741,11 @@
           }
         }
 
+        await updateStockDisplay();
+        await checkDeviceClaimed();
+
         closeClaimModal();
         document.getElementById('successModal').classList.add('active');
-        loadData();
 
       } catch (err) {
         console.error('Submit error:', err);
