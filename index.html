@@ -152,6 +152,29 @@
       letter-spacing: 4px; text-transform: uppercase; font-weight: 600;
     }
 
+    .claim-number-display {
+      text-align: center;
+      margin: 20px 0;
+      padding: 15px;
+      background: rgba(212, 175, 55, 0.05);
+      border: 1px solid rgba(212, 175, 55, 0.15);
+      border-radius: 12px;
+    }
+    .claim-number-display .label {
+      color: var(--cream-dim);
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .claim-number-display .number {
+      font-family: 'Cinzel', serif;
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: var(--gold-light);
+      text-shadow: 0 0 20px var(--gold-glow);
+    }
+
     .btn {
       display: block; width: 100%; padding: 18px;
       border: none; border-radius: 12px; font-size: 1.05rem; font-weight: 700;
@@ -364,6 +387,11 @@
       <div class="stock-counter" id="stockCount">2</div>
       <div class="stock-label">Codes Remaining</div>
 
+      <div class="claim-number-display hidden" id="claimNumberDisplay">
+        <div class="label">Your Claim Number</div>
+        <div class="number" id="claimNumberValue">#1</div>
+      </div>
+
       <div id="claimSection">
         <button class="btn btn-primary" id="claimBtn" onclick="openClaimModal()">
           Claim Your Royal Reward
@@ -374,6 +402,7 @@
         <h4>You've Already Claimed!</h4>
         <p>Your request has been received. We'll send your Minecraft code to your email soon.</p>
         <p id="claimedEmail" style="color:var(--cream-dim);"></p>
+        <p id="claimedNumber" style="color:var(--gold-light); font-family:'Cinzel',serif; font-size:1.2rem; margin-top:10px;"></p>
       </div>
 
       <div id="outOfStockSection" class="claimed-info error-state hidden">
@@ -423,6 +452,10 @@
       <div class="modal-icon">&#9819;</div>
       <h3>Request Submitted!</h3>
       <p>Your claim has been recorded. We'll send your Minecraft code to your email within 24 hours. One code per person — no exceptions.</p>
+      <div class="claim-number-display" style="margin:20px 0;">
+        <div class="label">Your Claim Number</div>
+        <div class="number" id="successClaimNumber">#1</div>
+      </div>
       <button class="btn btn-primary" onclick="closeSuccessModal()">Got It!</button>
     </div>
   </div>
@@ -492,10 +525,10 @@
     initSupabase();
 
     function getDeviceId() {
-      var id = localStorage.getItem('crowncash_device_id');
+      var id = localStorage.getItem('crowncash_device_id_v2');
       if (!id) {
         id = 'cc_' + Math.random().toString(36).substr(2, 16) + '_' + Date.now();
-        localStorage.setItem('crowncash_device_id', id);
+        localStorage.setItem('crowncash_device_id_v2', id);
       }
       return id;
     }
@@ -583,7 +616,7 @@
       } else if (supabaseClient) {
         var result = await supabaseClient
           .from('claims')
-          .select('email')
+          .select('email, claim_number')
           .eq('device_id', deviceId)
           .maybeSingle();
         if (!result.error) {
@@ -595,7 +628,15 @@
         document.getElementById('claimSection').classList.add('hidden');
         document.getElementById('claimedSection').classList.remove('hidden');
         document.getElementById('claimedEmail').textContent = 'Submitted: ' + existing.email;
+        document.getElementById('claimedNumber').textContent = 'Claim ' + formatClaimNumber(existing.claim_number);
       }
+    }
+
+    function formatClaimNumber(n) {
+      if (n === 1) return '#1st';
+      if (n === 2) return '#2nd';
+      if (n === 3) return '#3rd';
+      return '#' + n + 'th';
     }
 
     function openClaimModal() {
@@ -640,11 +681,6 @@
 
     function closeSuccessModal() {
       document.getElementById('successModal').classList.remove('active');
-    }
-
-    async function loadData() {
-      await updateStockDisplay();
-      await checkDeviceClaimed();
     }
 
     async function submitClaim() {
@@ -708,26 +744,24 @@
           return;
         }
 
+        var claimNumber = count + 1;
+
+        var claimData = {
+          email: email,
+          discord: discord,
+          ip_address: ip,
+          device_id: deviceId,
+          claim_number: claimNumber,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        };
+
         if (DEMO_MODE) {
-          demoClaims.push({
-            email: email,
-            discord: discord,
-            ip_address: ip,
-            device_id: deviceId,
-            status: 'pending',
-            created_at: new Date().toISOString()
-          });
+          demoClaims.push(claimData);
         } else if (supabaseClient) {
           var result3 = await supabaseClient
             .from('claims')
-            .insert([{
-              email: email,
-              discord: discord,
-              ip_address: ip,
-              device_id: deviceId,
-              status: 'pending',
-              created_at: new Date().toISOString()
-            }]);
+            .insert([claimData]);
 
           if (result3.error) {
             if (result3.error.message.includes('duplicate') || result3.error.code === '23505') {
@@ -742,7 +776,13 @@
         }
 
         await updateStockDisplay();
-        await checkDeviceClaimed();
+
+        document.getElementById('successClaimNumber').textContent = formatClaimNumber(claimNumber);
+
+        document.getElementById('claimSection').classList.add('hidden');
+        document.getElementById('claimedSection').classList.remove('hidden');
+        document.getElementById('claimedEmail').textContent = 'Submitted: ' + email;
+        document.getElementById('claimedNumber').textContent = 'Claim ' + formatClaimNumber(claimNumber);
 
         closeClaimModal();
         document.getElementById('successModal').classList.add('active');
