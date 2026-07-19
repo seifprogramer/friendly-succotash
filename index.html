@@ -736,7 +736,7 @@
             status: 'pending',
             created_at: new Date().toISOString()
           });
-          console.log('DEMO: Claim saved', demoClaims);
+          console.log('DEMO: Claim saved. Total claims:', demoClaims.length);
         } else if (supabaseClient) {
           var result3 = await supabaseClient
             .from('claims')
