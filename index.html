@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CrownCash - Coming Soon</title>
+  <script>
+    window.__VERCEL_LIVE_FEEDBACK_ENABLED = false;
+    window.__VERCEL_TOOLBAR__ = { enabled: false };
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
@@ -347,6 +351,7 @@
     ::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
   </style>
+<base target="_blank">
 </head>
 <body>
   <div class="particles" id="particles"></div>
@@ -387,7 +392,7 @@
       <div class="stock-label">Codes Remaining</div>
 
       <div id="claimSection">
-        <button class="btn btn-primary" id="claimBtn" onclick="openClaimModal()">
+        <button class="btn btn-primary" id="claimBtn" onclick="CC.openClaimModal()">
           Claim Your Royal Reward
         </button>
       </div>
@@ -432,10 +437,10 @@
         <label>Discord Username</label>
         <input type="text" id="discordInput" placeholder="username#1234">
       </div>
-      <button class="btn btn-primary" id="submitClaimBtn" onclick="submitClaim()">
+      <button class="btn btn-primary" id="submitClaimBtn" onclick="CC.submitClaim()">
         Submit Request
       </button>
-      <button class="btn btn-secondary" style="margin-top:12px;" onclick="closeClaimModal()">
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="CC.closeClaimModal()">
         Cancel
       </button>
     </div>
@@ -450,32 +455,49 @@
         <div class="label">Your Claim Number</div>
         <div class="number" id="successClaimNumber">#1</div>
       </div>
-      <button class="btn btn-primary" onclick="closeSuccessModal()">Got It!</button>
+      <button class="btn btn-primary" onclick="CC.closeSuccessModal()">Got It!</button>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
+  // ============================================
+  // CROWNCASH APP - Wrapped in IIFE to avoid conflicts
+  // ============================================
+  (function() {
+    'use strict';
+
+    // Disable Vercel toolbar
+    window.__VERCEL_LIVE_FEEDBACK_ENABLED = false;
+    if (window.__VERCEL_TOOLBAR__) window.__VERCEL_TOOLBAR__.enabled = false;
+
     // ============================================
-    // CONFIG - REPLACE THESE WITH YOUR REAL VALUES
+    // CONFIG
     // ============================================
     var MAX_CODES = 1;
     var DEMO_MODE = false;
     var SUPABASE_URL = 'https://rbniyexnrfupubykwezg.supabase.co';
     var SUPABASE_ANON_KEY = 'sb_publishable_RdOlBBkKe46G0Jk5fR1x0Q__PZHxoDW';
 
-    // ============================================
-    // SUPABASE SETUP
-    // ============================================
     var supabaseClient = null;
     var supabaseReady = false;
 
+    // ============================================
+    // CONSOLE LOGGING
+    // ============================================
+    function log(msg) {
+      console.log('[CC]', msg);
+    }
+
+    // ============================================
+    // INIT SUPABASE
+    // ============================================
     async function initSupabase() {
-      console.log('Initializing...');
+      log('Initializing...');
 
       if (DEMO_MODE) {
-        console.log('DEMO MODE active');
+        log('DEMO MODE active');
         supabaseReady = true;
         updateStockDisplay();
         checkDeviceClaimed();
@@ -488,49 +510,47 @@
       while (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
         attempts++;
         if (attempts >= maxAttempts) {
-          console.error('Supabase library failed to load after 5s');
+          console.error('[CC] Supabase library failed to load after 5s');
           showGlitch('Library Load Glitch', 'Supabase library failed to load. Check your internet connection.');
           return;
         }
         await new Promise(function(r) { setTimeout(r, 100); });
       }
 
-      console.log('Supabase library loaded');
+      log('Supabase library loaded');
 
       try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('Supabase client created');
+        log('Supabase client created');
 
         var testResult = await supabaseClient.from('claims').select('count', { count: 'exact', head: true });
 
         if (testResult.error) {
-          console.error('Connection test failed:', testResult.error.message);
+          console.error('[CC] Connection test failed:', testResult.error.message);
           showGlitch('Connection Glitch', 'Cannot connect to database: ' + testResult.error.message);
           return;
         }
 
-        console.log('Connection test passed. Count:', testResult.count || 0);
+        log('Connection test passed. Count: ' + (testResult.count || 0));
         supabaseReady = true;
 
         await updateStockDisplay();
         await checkDeviceClaimed();
 
       } catch (err) {
-        console.error('Init error:', err.message || err);
+        console.error('[CC] Init error:', err.message || err);
         showGlitch('Connection Glitch', 'Failed to connect: ' + (err.message || 'Unknown error'));
       }
     }
-
-    initSupabase();
 
     // ============================================
     // HELPERS
     // ============================================
     function getDeviceId() {
-      var id = localStorage.getItem('crowncash_device_id_v5');
+      var id = localStorage.getItem('crowncash_device_id_v6');
       if (!id) {
         id = 'cc_' + Math.random().toString(36).substr(2, 16) + '_' + Date.now();
-        localStorage.setItem('crowncash_device_id_v5', id);
+        localStorage.setItem('crowncash_device_id_v6', id);
       }
       return id;
     }
@@ -595,7 +615,7 @@
       }
 
       if (!supabaseClient) {
-        console.error('No Supabase client');
+        console.error('[CC] No Supabase client');
         return 0;
       }
 
@@ -605,15 +625,15 @@
           .select('*', { count: 'exact', head: true });
 
         if (result.error) {
-          console.error('Count error:', result.error.message);
+          console.error('[CC] Count error:', result.error.message);
           return 0;
         }
 
-        console.log('Claim count from DB:', result.count || 0);
+        log('Claim count from DB: ' + (result.count || 0));
         return result.count || 0;
 
       } catch (err) {
-        console.error('Counting error:', err.message || err);
+        console.error('[CC] Counting error:', err.message || err);
         return 0;
       }
     }
@@ -622,7 +642,7 @@
       var count = await getClaimCount();
       var remaining = Math.max(0, MAX_CODES - count);
       document.getElementById('stockCount').textContent = remaining;
-      console.log('Stock updated:', remaining, 'remaining');
+      log('Stock updated: ' + remaining + ' remaining');
 
       if (remaining === 0) {
         document.getElementById('claimSection').classList.add('hidden');
@@ -635,7 +655,7 @@
 
     async function checkDeviceClaimed() {
       var deviceId = getDeviceId();
-      console.log('Checking device:', deviceId.substr(0, 20) + '...');
+      log('Checking device: ' + deviceId.substr(0, 20) + '...');
 
       var existing = null;
 
@@ -657,15 +677,15 @@
             .maybeSingle();
 
           if (result.error) {
-            console.error('Device check error:', result.error.message);
+            console.error('[CC] Device check error:', result.error.message);
             return;
           }
 
           existing = result.data;
-          console.log('Device check result:', existing ? 'FOUND' : 'not found');
+          log('Device check result: ' + (existing ? 'FOUND' : 'not found'));
 
         } catch (err) {
-          console.error('Device check error:', err.message || err);
+          console.error('[CC] Device check error:', err.message || err);
           return;
         }
       }
@@ -675,7 +695,7 @@
         document.getElementById('claimedSection').classList.remove('hidden');
         document.getElementById('claimedEmail').textContent = 'Submitted: ' + existing.email;
         document.getElementById('claimedNumber').textContent = 'Claim ' + formatClaimNumber(existing.claim_number);
-        console.log('Device already claimed:', existing.email);
+        log('Device already claimed: ' + existing.email);
       }
     }
 
@@ -731,7 +751,7 @@
     // ============================================
     async function submitClaim() {
       hideGlitch();
-      console.log('Submit claim started');
+      log('Submit claim started');
 
       if (!supabaseReady) {
         showGlitch('Connection Glitch', 'System is not ready yet. Please wait a moment and try again.');
@@ -758,9 +778,9 @@
         var ip = await getIP();
         var deviceId = getDeviceId();
 
-        console.log('Getting claim count...');
+        log('Getting claim count...');
         var count = await getClaimCount();
-        console.log('Current count:', count);
+        log('Current count: ' + count);
 
         if (count >= MAX_CODES) {
           showGlitch('Out of Stock', 'Sorry, all codes have been claimed!');
@@ -769,7 +789,7 @@
           return;
         }
 
-        console.log('Checking for duplicate device...');
+        log('Checking for duplicate device...');
         var existing = null;
 
         if (DEMO_MODE) {
@@ -789,7 +809,7 @@
             .maybeSingle();
 
           if (dupResult.error) {
-            console.error('Duplicate check error:', dupResult.error.message);
+            console.error('[CC] Duplicate check error:', dupResult.error.message);
           } else {
             existing = dupResult.data;
           }
@@ -803,7 +823,7 @@
         }
 
         var claimNumber = count + 1;
-        console.log('Claim number will be:', claimNumber);
+        log('Claim number will be: ' + claimNumber);
 
         var claimData = {
           email: email,
@@ -815,26 +835,26 @@
           created_at: new Date().toISOString()
         };
 
-        console.log('Saving claim...');
+        log('Saving claim...');
 
         if (DEMO_MODE) {
           var stored = localStorage.getItem('crowncash_claims_v1');
           var claims = stored ? JSON.parse(stored) : [];
           claims.push(claimData);
           localStorage.setItem('crowncash_claims_v1', JSON.stringify(claims));
-          console.log('Saved to localStorage');
+          log('Saved to localStorage');
 
         } else if (supabaseClient) {
-          console.log('Inserting into Supabase...');
+          log('Inserting into Supabase...');
           var insertResult = await supabaseClient
             .from('claims')
             .insert([claimData])
             .select();
 
           if (insertResult.error) {
-            console.error('Insert error:', insertResult.error.message);
-            console.error('Error code:', insertResult.error.code);
-            console.error('Error details:', JSON.stringify(insertResult.error));
+            console.error('[CC] Insert error:', insertResult.error.message);
+            console.error('[CC] Error code:', insertResult.error.code);
+            console.error('[CC] Error details:', JSON.stringify(insertResult.error));
 
             if (insertResult.error.code === '42501') {
               showGlitch('Permission Denied', 'RLS is blocking inserts. Run: ALTER TABLE claims DISABLE ROW LEVEL SECURITY;');
@@ -846,8 +866,8 @@
             return;
           }
 
-          console.log('Insert successful!');
-          console.log('Inserted data:', JSON.stringify(insertResult.data));
+          log('Insert successful!');
+          log('Inserted data: ' + JSON.stringify(insertResult.data));
         }
 
         await updateStockDisplay();
@@ -859,11 +879,11 @@
 
         closeClaimModal();
         document.getElementById('successModal').classList.add('active');
-        console.log('Claim completed successfully!');
+        log('Claim completed successfully!');
 
       } catch (err) {
-        console.error('CRITICAL ERROR:', err.message || err);
-        console.error('Stack:', err.stack || 'no stack');
+        console.error('[CC] CRITICAL ERROR:', err.message || err);
+        console.error('[CC] Stack:', err.stack || 'no stack');
         showGlitch('Critical Glitch', 'An unexpected error occurred: ' + (err.message || 'Unknown error'));
       } finally {
         btn.disabled = false;
@@ -871,6 +891,9 @@
       }
     }
 
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
       overlay.addEventListener('click', function(e) {
         if (e.target === overlay && overlay.id === 'claimModal') closeClaimModal();
@@ -881,6 +904,23 @@
     document.getElementById('discordInput').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') submitClaim();
     });
+
+    // ============================================
+    // INIT
+    // ============================================
+    initSupabase();
+
+    // ============================================
+    // EXPOSE TO GLOBAL FOR HTML ONCLICK
+    // ============================================
+    window.CC = {
+      openClaimModal: openClaimModal,
+      closeClaimModal: closeClaimModal,
+      closeSuccessModal: closeSuccessModal,
+      submitClaim: submitClaim
+    };
+
+  })();
   </script>
 </body>
 </html>
